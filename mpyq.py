@@ -140,14 +140,21 @@ class MPQArchive(object):
 
         magic = self.file.read(4)
         self.file.seek(0)
+        header_offset = 0
+
+        if magic ==  b'HM3W':
+            header_offset = 512
+            w3header = self.file.read(header_offset)
+            magic = self.file.read(4)
+            self.file.seek(header_offset)
 
         if magic == b'MPQ\x1a':
             header = read_mpq_header()
-            header['offset'] = 0
+            header['offset'] = header_offset
         elif magic == b'MPQ\x1b':
             user_data_header = read_mpq_user_data_header()
             header = read_mpq_header(user_data_header['mpq_header_offset'])
-            header['offset'] = user_data_header['mpq_header_offset']
+            header['offset'] = header_offset + user_data_header['mpq_header_offset']
             header['user_data_header'] = user_data_header
         else:
             raise ValueError("Invalid file header.")
@@ -196,7 +203,8 @@ class MPQArchive(object):
             if compression_type == 0:
                 return data
             elif compression_type == 2:
-                return zlib.decompress(data[1:], 15)
+                zobj = zlib.decompressobj()
+                return zobj.decompress(data[1:])
             elif compression_type == 16:
                 return bz2.decompress(data[1:])
             else:
@@ -218,7 +226,9 @@ class MPQArchive(object):
             file_data = self.file.read(block_entry.archived_size)
 
             if block_entry.flags & MPQ_FILE_ENCRYPTED:
-                raise NotImplementedError("Encryption is not supported yet.")
+                key = self._hash(os.path.basename(filename), 'TABLE')
+                if block_entry.flags & MPQ_FILE_FIX_KEY:
+                    key = (key + block_entry.offset) ^ block_entry.size
 
             if not block_entry.flags & MPQ_FILE_SINGLE_UNIT:
                 # File consists of many sectors. They all need to be
@@ -230,12 +240,18 @@ class MPQArchive(object):
                     sectors += 1
                 else:
                     crc = False
+                sectors_data = file_data[:4*(sectors+1)]
+                if block_entry.flags & MPQ_FILE_ENCRYPTED:
+                    sectors_data = self._decrypt(sectors_data, key - 1)
                 positions = struct.unpack('<%dI' % (sectors + 1),
-                                          file_data[:4*(sectors+1)])
+                                          sectors_data)
                 result = BytesIO()
                 sector_bytes_left = block_entry.size
                 for i in range(len(positions) - (2 if crc else 1)):
                     sector = file_data[positions[i]:positions[i+1]]
+                    if block_entry.flags & MPQ_FILE_ENCRYPTED:
+                        sector = self._decrypt(sector, key + i)
+
                     if (block_entry.flags & MPQ_FILE_COMPRESS and
                         (force_decompress or sector_bytes_left > len(sector))):
                         sector = decompress(sector)
