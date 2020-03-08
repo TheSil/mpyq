@@ -272,10 +272,8 @@ class MPQArchive(object):
                 else:
                     block_count = 1
 
-                self.file.seek(offset)
-                file_data = self.file.read(block_entry.archived_size)
-
-                sectors_data = file_data[:4*(sectors+1)]
+                self.file.seek(offset, 0)
+                sectors_data = self.file.read(4*(sectors+1))
                 if block_entry.flags & MPQ_FILE_ENCRYPTED:
                     sectors_data = self._decrypt(sectors_data, key - 1)
                 positions = struct.unpack('<%dI' % (sectors + 1),
@@ -283,7 +281,12 @@ class MPQArchive(object):
 
                 current_offset = 0
                 if block_entry.flags & MPQ_FILE_COMPRESS :
-                    current_offset = positions[0]
+                    self.file.seek(offset + positions[0], 0)
+                    raw_bytes_to_read = positions[block_count] - positions[0]
+                else:
+                    raw_bytes_to_read = block_count * sector_size
+
+                file_data = self.file.read(raw_bytes_to_read)
 
                 for i in range(block_count):
                     this_sector_size = sector_size
