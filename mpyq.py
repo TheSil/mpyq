@@ -116,18 +116,24 @@ class MPQArchive(object):
     def read_header(self):
         """Read the header of a MPQ archive."""
 
-        def read_mpq_header(offset=None):
+        def read_mpq_header(file_size, offset=None, is_w3_map=False, ):
             if offset:
                 self.file.seek(offset)
+            else:
+                offset = self.file.tell()
             data = self.file.read(32)
             header = MPQFileHeader._make(
                 struct.unpack(MPQFileHeader.struct_format, data))
             header = header._asdict()
-            if header['format_version'] == 1:
+            if header['format_version'] == 1 and not is_w3_map:
                 data = self.file.read(12)
                 extended_header = MPQFileHeaderExt._make(
                     struct.unpack(MPQFileHeaderExt.struct_format, data))
                 header.update(extended_header._asdict())
+            block_table_offset = header['block_table_offset'] + offset
+            if block_table_offset + 16 * header['block_table_entries'] > file_size:
+                header['block_table_entries'] = (file_size - block_table_offset)//16
+
             return header
 
         def read_mpq_user_data_header():
@@ -138,26 +144,36 @@ class MPQArchive(object):
             header['content'] = self.file.read(header['user_data_header_size'])
             return header
 
-        magic = self.file.read(4)
-        self.file.seek(0)
+        # headers need not be at the offset 0 and user data might not correctly reference
+        # MPQ header (common in W3 maps), so we need to find headers at multiples of 512 bytes
+        searching = True
+        is_w3_map = False
         header_offset = 0
+        self.file.seek(0, 2)
+        file_size = self.file.tell()
+        while searching:
+            if header_offset >= file_size:
+                raise ValueError("Invalid file header.")
 
-        if magic ==  b'HM3W':
-            header_offset = 512
-            w3header = self.file.read(header_offset)
+            self.file.seek(header_offset)
             magic = self.file.read(4)
             self.file.seek(header_offset)
+            if magic == b'HM3W':
+                is_w3_map = True
+            elif magic == b'MPQ\x1a':
+                header = read_mpq_header(offset=None, is_w3_map=is_w3_map, file_size=file_size)
+                header['offset'] = header_offset
+                searching = False
+            elif magic == b'MPQ\x1b':
+                user_data_header = read_mpq_user_data_header()
+                # MPQ header reference cannot be trusted...
+                #header = read_mpq_header(user_data_header['mpq_header_offset'])
+                #header['offset'] = header_offset + user_data_header['mpq_header_offset']
+                #header['user_data_header'] = user_data_header
 
-        if magic == b'MPQ\x1a':
-            header = read_mpq_header()
-            header['offset'] = header_offset
-        elif magic == b'MPQ\x1b':
-            user_data_header = read_mpq_user_data_header()
-            header = read_mpq_header(user_data_header['mpq_header_offset'])
-            header['offset'] = header_offset + user_data_header['mpq_header_offset']
-            header['user_data_header'] = user_data_header
-        else:
-            raise ValueError("Invalid file header.")
+            header_offset += 0x200
+
+
 
         return header
 
@@ -205,6 +221,8 @@ class MPQArchive(object):
             elif compression_type == 2:
                 zobj = zlib.decompressobj()
                 return zobj.decompress(data[1:])
+            elif compression_type == 8:
+                raise RuntimeError("PKLIB compression not supported")
             elif compression_type == 16:
                 return bz2.decompress(data[1:])
             else:
@@ -247,7 +265,14 @@ class MPQArchive(object):
                                           sectors_data)
                 result = BytesIO()
                 sector_bytes_left = block_entry.size
-                for i in range(len(positions) - (2 if crc else 1)):
+                if sector_bytes_left >= sector_size:
+                    sector_mask = sector_size - 1
+                    block_bytes = sector_bytes_left & ~sector_mask
+                    block_count = block_bytes // sector_size
+                else:
+                    block_count = 1
+
+                for i in range(block_count):
                     sector = file_data[positions[i]:positions[i+1]]
                     if block_entry.flags & MPQ_FILE_ENCRYPTED:
                         sector = self._decrypt(sector, key + i)
