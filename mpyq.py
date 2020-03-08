@@ -202,13 +202,19 @@ class MPQArchive(object):
 
         return [unpack_entry(i) for i in range(table_entries)]
 
-    def get_hash_table_entry(self, filename):
+    def get_hash_table_entry(self, filename, locale=0, platform=0):
         """Get the hash table entry corresponding to a given filename."""
         hash_a = self._hash(filename, 'HASH_A')
         hash_b = self._hash(filename, 'HASH_B')
+        best = None
         for entry in self.hash_table:
             if (entry.hash_a == hash_a and entry.hash_b == hash_b):
-                return entry
+                if locale == entry.locale and platform == entry.platform:
+                    return entry
+                if (entry.locale == 0 or locale == entry.locale) and \
+                    (entry.platform == 0 or platform == entry.platform):
+                    best = entry
+        return best
 
     def read_file(self, filename, force_decompress=False):
         """Read a file from the MPQ archive."""
