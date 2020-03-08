@@ -246,8 +246,6 @@ class MPQArchive(object):
                 return None
 
             offset = block_entry.offset + self.header['offset']
-            self.file.seek(offset)
-            file_data = self.file.read(block_entry.archived_size)
 
             if block_entry.flags & MPQ_FILE_ENCRYPTED:
                 key = self._hash(os.path.basename(filename), 'TABLE')
@@ -274,14 +272,25 @@ class MPQArchive(object):
                 else:
                     block_count = 1
 
+                self.file.seek(offset)
+                file_data = self.file.read(block_entry.archived_size)
+
                 sectors_data = file_data[:4*(sectors+1)]
                 if block_entry.flags & MPQ_FILE_ENCRYPTED:
                     sectors_data = self._decrypt(sectors_data, key - 1)
                 positions = struct.unpack('<%dI' % (sectors + 1),
                                           sectors_data)
 
+                current_offset = 0
+                if block_entry.flags & MPQ_FILE_COMPRESS :
+                    current_offset = positions[0]
+
                 for i in range(block_count):
-                    sector = file_data[positions[i]:positions[i+1]]
+                    this_sector_size = sector_size
+                    if block_entry.flags & MPQ_FILE_COMPRESS:
+                        this_sector_size = positions[i+1] - positions[i]
+
+                    sector = file_data[current_offset:current_offset + this_sector_size]
                     if block_entry.flags & MPQ_FILE_ENCRYPTED:
                         sector = self._decrypt(sector, key + i)
 
@@ -291,10 +300,15 @@ class MPQArchive(object):
 
                     sector_bytes_left -= len(sector)
                     result.write(sector)
+
+                    current_offset += this_sector_size
                 file_data = result.getvalue()
             else:
                 # Single unit files only need to be decompressed, but
                 # compression only happens when at least one byte is gained.
+                self.file.seek(offset)
+                file_data = self.file.read(block_entry.archived_size)
+
                 if (block_entry.flags & MPQ_FILE_COMPRESS and
                     (force_decompress or block_entry.size > block_entry.archived_size)):
                     file_data = decompress(file_data)
