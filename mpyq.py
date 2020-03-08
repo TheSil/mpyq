@@ -264,11 +264,7 @@ class MPQArchive(object):
                     sectors += 1
                 else:
                     crc = False
-                sectors_data = file_data[:4*(sectors+1)]
-                if block_entry.flags & MPQ_FILE_ENCRYPTED:
-                    sectors_data = self._decrypt(sectors_data, key - 1)
-                positions = struct.unpack('<%dI' % (sectors + 1),
-                                          sectors_data)
+
                 result = BytesIO()
                 sector_bytes_left = block_entry.size
                 if sector_bytes_left >= sector_size:
@@ -277,6 +273,12 @@ class MPQArchive(object):
                     block_count = block_bytes // sector_size
                 else:
                     block_count = 1
+
+                sectors_data = file_data[:4*(sectors+1)]
+                if block_entry.flags & MPQ_FILE_ENCRYPTED:
+                    sectors_data = self._decrypt(sectors_data, key - 1)
+                positions = struct.unpack('<%dI' % (sectors + 1),
+                                          sectors_data)
 
                 for i in range(block_count):
                     sector = file_data[positions[i]:positions[i+1]]
