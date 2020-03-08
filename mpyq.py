@@ -68,10 +68,11 @@ MPQHashTableEntry = namedtuple('MPQHashTableEntry',
     hash_b
     locale
     platform
+    reserved
     block_table_index
     '''
 )
-MPQHashTableEntry.struct_format = '2I2HI'
+MPQHashTableEntry.struct_format = '2IHBBI'
 
 MPQBlockTableEntry = namedtuple('MPQBlockTableEntry',
     '''
@@ -191,7 +192,7 @@ class MPQArchive(object):
         table_entries = self.header['%s_table_entries' % table_type]
         key = self._hash('(%s table)' % table_type, 'TABLE')
 
-        self.file.seek(table_offset + self.header['offset'])
+        self.file.seek(table_offset + self.header['offset'], 0)
         data = self.file.read(table_entries * 16)
         data = self._decrypt(data, key)
 
@@ -207,7 +208,7 @@ class MPQArchive(object):
         hash_a = self._hash(filename, 'HASH_A')
         hash_b = self._hash(filename, 'HASH_B')
         best = None
-        for entry in self.hash_table:
+        for idx, entry in enumerate(self.hash_table):
             if (entry.hash_a == hash_a and entry.hash_b == hash_b):
                 if locale == entry.locale and platform == entry.platform:
                     return entry
