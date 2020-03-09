@@ -11,6 +11,7 @@ import bz2
 import os
 import struct
 import zlib
+import explode
 from collections import namedtuple
 from io import BytesIO
 
@@ -229,7 +230,7 @@ class MPQArchive(object):
                 zobj = zlib.decompressobj()
                 return zobj.decompress(data[1:])
             elif compression_type == 8:
-                raise RuntimeError("PKLIB compression not supported")
+                return explode.explode(data[1:])
             elif compression_type == 16:
                 return bz2.decompress(data[1:])
             else:
@@ -424,6 +425,11 @@ class MPQArchive(object):
             seed2 = value + seed2 + (seed2 << 5) + 3 & 0xFFFFFFFF
 
             result.write(struct.pack("<I", value))
+
+        # append any remaining data
+        rem = len(data) % 4
+        if rem:
+            result.write(data[-rem:])
 
         return result.getvalue()
 
