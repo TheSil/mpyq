@@ -113,16 +113,6 @@ ChCodeAsc =[
     0x1C00, 0x0C00, 0x1400, 0x0400, 0x1800, 0x0800, 0x1000, 0x0000
 ]
 
-class TDataInfo:
-    #
-    def __init__(self, pbInBuff, pbOutBuff):
-        self.pbInBuff = pbInBuff
-        self.pbOutBuff = pbOutBuff
-        # unsigned char * pbInBuff;           # Pointer to input data buffer
-        # unsigned char * pbInBuffEnd;        # End of the input buffer
-        # unsigned char * pbOutBuff;          # Pointer to output data buffer
-        # unsigned char * pbOutBuffEnd;       # Pointer to output data buffer
-
 
 class TDcmpStruct:
 
@@ -174,7 +164,7 @@ class TDcmpStruct:
     def write_buf(self, buf):
         self.decompressed += buf
 
-def GenDecodeTabs(#  
+def GenDecodeTabs(#
     positions,          #  [out] Table of positions
     start_indexes,      #  [in] Table of start indexes
     length_bits):         #  [in] Table of lengths. Each length is stored as number of bits
@@ -188,16 +178,12 @@ def GenDecodeTabs(#
             index += length
 
 
-# TDcmpStruct * pWork
 def GenAscTabs(pWork):
-    #unsigned short * pChCodeAsc = &ChCodeAsc[0xFF]
     pChCodeAscIdx = 0xFF
-
     count = 0x00FF
 
     while pChCodeAscIdx >= 0:
         pChBitsAscIdx = count
-        #unsigned char * pChBitsAsc = pWork.ChBitsAsc + count
         bits_asc = pWork.ChBitsAsc[pChBitsAscIdx]
 
         if bits_asc <= 8:
@@ -205,14 +191,14 @@ def GenAscTabs(pWork):
             acc = ChCodeAsc[pChCodeAscIdx]
 
             while True:
-                pWork.offs2C34[acc] = count & 0xFF # (unsigned char)count
+                pWork.offs2C34[acc] = count & 0xFF
                 acc += add
                 if acc >= 0x100:
                     break
 
         else:
             acc = (ChCodeAsc[pChCodeAscIdx] & 0xFF)
-            if acc != 0: # elif((acc = (*pChCodeAsc & 0xFF)) != 0):
+            if acc != 0:
                 pWork.offs2C34[acc] = 0xFF
 
                 if ChCodeAsc[pChCodeAscIdx] & 0x3F:
@@ -223,7 +209,7 @@ def GenAscTabs(pWork):
                     acc = ChCodeAsc[pChCodeAscIdx] >> 4
 
                     while True:
-                        pWork.offs2D34[acc] = count & 0xFF # (unsigned char)count
+                        pWork.offs2D34[acc] = count & 0xFF
                         acc += add
                         if acc >= 0x100:
                             break
@@ -235,7 +221,7 @@ def GenAscTabs(pWork):
                     acc = ChCodeAsc[pChCodeAscIdx]
 
                     while True:
-                        pWork.offs2E34[acc] = count & 0xFF # (unsigned char)count
+                        pWork.offs2E34[acc] = count & 0xFF
                         acc += add
                         if acc >= 0x80:
                             break
@@ -248,7 +234,7 @@ def GenAscTabs(pWork):
                 acc = ChCodeAsc[pChCodeAscIdx] >> 8
 
                 while True:
-                    pWork.offs2EB4[acc] = count & 0xFF #(unsigned char)count
+                    pWork.offs2EB4[acc] = count & 0xFF
                     acc += add
                     if acc >= 0x100:
                         break
@@ -263,8 +249,6 @@ def GenAscTabs(pWork):
 #  the input buffer, if needed.
 #  Returns: PKDCL_OK:         Operation was successful
 #           PKDCL_STREAM_END: There are no more bits in the input buffer
-
-# static int WasteBits(TDcmpStruct * pWork, unsigned int nBits)
 def WasteBits(pWork, nBits):
 
     #  If number of bits required is less than number of (bits in the buffer) ?
@@ -304,8 +288,6 @@ def WasteBits(pWork, nBits):
 #            0x304: Repetition, length of 0x206 bytes
 #            0x305: End of stream
 #            0x306: Error
-
-# static unsigned int DecodeLit(TDcmpStruct * pWork)
 def DecodeLit(pWork):
 
     #  Test the current bit in byte buffer. If is not set, simply return the next 8 bits.
@@ -374,7 +356,6 @@ def DecodeLit(pWork):
 # -----------------------------------------------------------------------------
 #  Decodes the distance of the repetition, backwards relative to the
 #  current output buffer position
-#static unsigned int DecodeDist(TDcmpStruct * pWork, unsigned int rep_length)
 def DecodeDist(pWork, rep_length):
     #  Next 2-8 bits in the input buffer is the distance position code
     dist_pos_code = pWork.DistPosCodes[pWork.bit_buff & 0xFF]
@@ -429,18 +410,16 @@ def Expand(pWork):
             target_offset = pWork.outputPos
             source_offset = pWork.outputPos - minus_dist
 
+            #  Copy the repeating sequence
+            pWork.out_buff[target_offset:target_offset + rep_length] = \
+                pWork.out_buff[source_offset:source_offset+ rep_length]
+
             #  Update buffer output position
             pWork.outputPos += rep_length
 
-            #  Copy the repeating sequence
-            for i in range(rep_length):
-                pWork.out_buff[target_offset] = pWork.out_buff[source_offset]
-                target_offset += 1
-                source_offset += 1
-
         else:
             pWork.outputPos += 1
-            pWork.out_buff[pWork.outputPos - 1] = next_literal & 0xFF #(unsigned char)next_literal
+            pWork.out_buff[pWork.outputPos - 1] = next_literal & 0xFF
 
         #  Flush the output buffer, if number of extracted bytes has reached the end
         if pWork.outputPos >= 0x2000:
@@ -455,11 +434,10 @@ def Expand(pWork):
             #  within decompressed part of the output buffer.
             target_offset = 0
             source_offset = 0x1000
+            copy_length = pWork.outputPos - 0x1000
 
-            for i in range(pWork.outputPos - 0x1000):
-                pWork.out_buff[target_offset] = pWork.out_buff[source_offset]
-                target_offset += 1
-                source_offset += 1
+            pWork.out_buff[target_offset:target_offset + copy_length] = \
+                pWork.out_buff[source_offset:source_offset+ copy_length]
 
             pWork.outputPos -= 0x1000
 
@@ -474,13 +452,6 @@ def Expand(pWork):
 
 # -----------------------------------------------------------------------------
 #  Main exploding function.
-
-# unsigned int explode(
-#         unsigned int (*read_buf)(char *buf, unsigned  int *size, void *param),
-#         void         (*write_buf)(char *buf, unsigned  int *size, void *param),
-#         char         *work_buf,
-#         void         *param)
-
 def explode(input_buffer):
     pWork = TDcmpStruct(input_buffer)
 
@@ -509,14 +480,14 @@ def explode(input_buffer):
         if pWork.ctype != CMP_ASCII:
             raise Exception("CMP_INVALID_MODE")
 
-        pWork.ChBitsAsc[:len(pWork.ChBitsAsc)] = ChBitsAsc # memcpy(pWork.ChBitsAsc, ChBitsAsc, len(pWork.ChBitsAsc))
+        pWork.ChBitsAsc[:len(pWork.ChBitsAsc)] = ChBitsAsc
         GenAscTabs(pWork)
 
-    pWork.LenBits[:len(pWork.LenBits)]     = LenBits # memcpy(pWork.LenBits, LenBits, len(pWork.LenBits))
+    pWork.LenBits[:len(pWork.LenBits)]     = LenBits
     GenDecodeTabs(pWork.LengthCodes, LenCode, pWork.LenBits, )
-    pWork.ExLenBits[:len(pWork.ExLenBits)] = ExLenBits # memcpy(pWork.ExLenBits, ExLenBits, len(pWork.ExLenBits))
-    pWork.LenBase[:len(pWork.LenBase)]     = LenBase # memcpy(pWork.LenBase, LenBase, len(pWork.LenBase))
-    pWork.DistBits[:len(pWork.DistBits)]   = DistBits # memcpy(pWork.DistBits, DistBits, len(pWork.DistBits))
+    pWork.ExLenBits[:len(pWork.ExLenBits)] = ExLenBits
+    pWork.LenBase[:len(pWork.LenBase)]     = LenBase
+    pWork.DistBits[:len(pWork.DistBits)]   = DistBits
     GenDecodeTabs(pWork.DistPosCodes, DistCode, pWork.DistBits)
     if Expand(pWork) != 0x306:
         return pWork.decompressed
