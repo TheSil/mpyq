@@ -9,7 +9,7 @@ setup(name='mpyq',
       author_email='aku.kotkavuo@gmail.com',
       url='http://github.com/eagleflo/mpyq/',
       description='A Python library for extracting MPQ (MoPaQ) files.',
-      py_modules=['mpyq'],
+      py_modules=['mpyq', 'explode'],
       entry_points={
         'console_scripts': ['mpyq = mpyq:main']
       },
