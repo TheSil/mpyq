@@ -411,8 +411,10 @@ def Expand(pWork):
             source_offset = pWork.outputPos - minus_dist
 
             #  Copy the repeating sequence
-            pWork.out_buff[target_offset:target_offset + rep_length] = \
-                pWork.out_buff[source_offset:source_offset+ rep_length]
+            for i in range(rep_length):
+                pWork.out_buff[target_offset] = pWork.out_buff[source_offset]
+                target_offset += 1
+                source_offset += 1
 
             #  Update buffer output position
             pWork.outputPos += rep_length
@@ -434,10 +436,11 @@ def Expand(pWork):
             #  within decompressed part of the output buffer.
             target_offset = 0
             source_offset = 0x1000
-            copy_length = pWork.outputPos - 0x1000
 
-            pWork.out_buff[target_offset:target_offset + copy_length] = \
-                pWork.out_buff[source_offset:source_offset+ copy_length]
+            for i in range(pWork.outputPos - 0x1000):
+                pWork.out_buff[target_offset] = pWork.out_buff[source_offset]
+                target_offset += 1
+                source_offset += 1
 
             pWork.outputPos -= 0x1000
 
